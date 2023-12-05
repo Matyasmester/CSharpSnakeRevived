@@ -11,15 +11,18 @@ namespace Snake
         public int X { get; set; }
         public int Y { get; set; }
 
+        public int prevX { get; set; }
+        public int prevY { get; set; }
+
         public Direction direction;
 
-        public BodyPart Next;
+        public BodyPart parent;
 
-        public BodyPart(int X, int Y, Direction direction, BodyPart Next)
+        public BodyPart(int X, int Y, Direction direction, BodyPart parent)
         {
             this.X = X;
             this.Y = Y;
-            this.Next = Next;
+            this.parent = parent;
             this.direction = direction;
         }
 
@@ -36,11 +39,12 @@ namespace Snake
         private static ConsoleKeyInfo currentKey;
 
         private static int nRefreshes = 0;
+        private static int score = 0;
 
         private const int RefreshInterval = 400;
 
         private const int Width = 30;
-        private const int Height = 10;
+        private const int Height = 15;
 
         private const char Food = 'X';
         private const char Player = 'O';
@@ -52,6 +56,9 @@ namespace Snake
 
         private static List<BodyPart> Body = new();
         private static BodyPart? NONE = null;
+
+        private static bool hasPickedUpFood = false;
+        private static BodyPart? currentParent = NONE;
 
         private static void FillAndShowMap()
         {
@@ -98,9 +105,9 @@ namespace Snake
             BodyPart head = new(startX, startY, Direction.Left, NONE);
             Body.Add(head);
 
-            Map[startX, startY] = Player;
-
             FillAndShowMap();
+
+            Map[startX, startY] = Player;
 
             new Thread(() =>
             {
@@ -112,26 +119,55 @@ namespace Snake
 
             while (true)
             {
+                if (hasPickedUpFood)
+                {
+                    AddPartToBody(Body.Last());
+                    hasPickedUpFood = false;
+                    score++;
+                }
                 if (nRefreshes % 12 == 0) SpawnRandomFood();
 
                 Direction currentDirection = ParseDirection(currentKey);
 
                 head.SetDirection(currentDirection);
 
-                MovePart(head);
-                Thread.Sleep(RefreshInterval);
+                MoveBody();
                 Refresh();
             }
         }
 
         private static void MoveBody()
         {
-            //TODO
+            BodyPart head = Body.First();
+            MovePart(head);
+            
+            for(int i = 1; i < Body.Count; i++)
+            {
+                BodyPart current = Body[i];
+
+                int x = current.X;
+                int y = current.Y;
+
+                Map[x, y] = Empty;
+
+                current.prevX = x;
+                current.prevY = y;
+
+                current.X = current.parent.prevX;
+                current.Y = current.parent.prevY;
+
+                Map[current.X, current.Y] = Player; 
+            }
         }
 
         private static void MovePart(BodyPart part)
         {
-            Map[part.X, part.Y] = Empty;
+            int x = part.X;
+            int y = part.Y;
+            Map[x, y] = Empty;
+
+            part.prevX = x;
+            part.prevY = y;
 
             switch (part.direction)
             {
@@ -158,10 +194,21 @@ namespace Snake
 
             if (destination == Food)
             {
-                AddPartToBody(part);
-            };
+                hasPickedUpFood = true;
+                currentParent = part;
+            }
+            
+            if (destination == Wall || destination == Player)
+            {
+                EndCurrentGame("you died xd, score: " + score, score);
+            }
 
             Map[newX, newY] = Player;
+        }
+        private static void EndCurrentGame(string msg, int exitCode)
+        {
+            Console.WriteLine(msg);
+            Environment.Exit(exitCode);
         }
 
         private static void AddPartToBody(BodyPart parent)
@@ -226,6 +273,7 @@ namespace Snake
 
         private static void Refresh()
         {
+            Thread.Sleep(RefreshInterval);
             Console.Clear();
             ShowMap();
             nRefreshes++;
